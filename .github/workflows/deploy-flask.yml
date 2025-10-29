@@ -58,6 +58,12 @@ jobs:
                 image: ${{ secrets.DOCKER_USERNAME }}/flask-eks-app:latest
                 ports:
                 - containerPort: 80
+
+      - name: Force rollout restart
+        run: |
+          aws eks update-kubeconfig --name devops-eks-cluster --region us-east-1
+          kubectl rollout restart deployment flask-app
+
         ---
         apiVersion: v1
         kind: Service
