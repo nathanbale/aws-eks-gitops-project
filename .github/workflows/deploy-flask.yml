@@ -1,4 +1,4 @@
-name: Build and Deploy Flask App to EKS
+name: Build, Test, and Deploy Flask App to EKS
 
 on:
   push:
@@ -41,14 +41,25 @@ jobs:
         kubectl apply -f flask-deployment-staging.yaml -n staging
         kubectl rollout status deployment/flask-deployment-staging -n staging
 
-    - name: Wait and verify staging
+    - name: Health check staging
       run: |
-        echo "Waiting 60 seconds before production deploy..."
-        sleep 60
-        kubectl get pods -n staging
+        echo "Checking if staging environment is responding..."
+        STAGING_URL=$(kubectl get svc flask-service-staging -n staging -o jsonpath='{.status.loadBalancer.ingress[0].hostname}')
+        echo "Testing http://$STAGING_URL"
+        for i in {1..10}; do
+          STATUS=$(curl -s -o /dev/null -w "%{http_code}" http://$STAGING_URL)
+          if [ "$STATUS" = "200" ]; then
+            echo "✅ Staging is healthy!"
+            exit 0
+          fi
+          echo "Attempt $i/10 failed (HTTP $STATUS), retrying in 10s..."
+          sleep 10
+        done
+        echo "❌ Staging failed health check. Aborting pipeline."
+        exit 1
 
     - name: Deploy to Production
+      if: success()
       run: |
         kubectl apply -f flask-deployment-prod.yaml -n production
         kubectl rollout status deployment/flask-deployment-prod -n production
-
